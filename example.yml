@@ -1,0 +1,19 @@
+box:
+    background: false
+    log: "| tee"
+
+cluster:
+    instances:
+        node1:
+            listen: '127.0.0.1:3301'
+            remote_addr: '127.0.0.1:3301'
+        node2:
+            listen: '127.0.0.2:3301'
+            remote_addr: '127.0.0.2:3301'
+
+    replication:
+        username: 'replicator'
+        password: 'replicator_pass'
+
+    replication_policy: 'mesh'
+    master: 'node1'
