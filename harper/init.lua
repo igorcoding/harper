@@ -39,14 +39,18 @@ local function get_config(self, local_config)
             deep_merge(cfg.replication, cluster_config.replication or {})
 
             assert(cfg.listen, string.format('no listen in %s instance', k))
-            assert(cfg.remote_addr, string.format('no remote_addr in %s instance', k))
             assert(cfg.replication, string.format('no replication in %s instance', k))
-            assert(cfg.replication.username, string.format('no replication.username in %s instance', k))
-            assert(cfg.replication.password, string.format('no replication.password in %s instance', k))
+
+            if cfg.remote_addr == nil then
+                cfg.remote_addr = cfg.listen
+            end
         end
     end
 
     local make_replication_addr = function(cfg)
+        if cfg.replication.username and cfg.replication.password then
+            return cfg.remote_addr
+        end
         return string.format('%s:%s@%s', cfg.replication.username, cfg.replication.password, cfg.remote_addr)
     end
 
@@ -74,7 +78,7 @@ local function get_config(self, local_config)
             return {
                 replication = replication,
                 read_only = not is_master
-            }
+            }, is_master
         end,
         master_slave = function(cluster_config)
             local master = get_master(cluster_config)
@@ -91,16 +95,19 @@ local function get_config(self, local_config)
                     make_replication_addr(cluster_config.instances[master])
                 },
                 read_only = not is_master
-            }
+            }, is_master
         end,
         none = function(cluster_config)
+            if #cluster_config.instances > 1 then
+                error('Too many instances for replication_policy=none (must be 1)')
+            end
             return {
                 replication = '',
                 read_only = false
-            }
+            }, true
         end
     }
-    local replication_policy = replication_policies[cluster_config.replication_policy or 'mesh']
+    local replication_policy = replication_policies[cluster_config.replication_policy or 'none']
     if replication_policy == nil then
         local supported_policies = {}
         for k, _ in pairs(replication_policies) do
@@ -114,7 +121,7 @@ local function get_config(self, local_config)
         ))
         return nil
     end
-    local instance_replication = replication_policy(cluster_config)
+    local instance_replication, is_master = replication_policy(cluster_config)
 
     instance_config.remote_addr = nil
     instance_config.disabled = nil
@@ -143,6 +150,7 @@ local function start_watcher(self, on_new_config)
         while gen == package.reload.count do
             local prev_context = table.copy(self.backend_context)
             local ok, err = xpcall(function()
+                local have_changes
                 self.backend_context, have_changes = self.backend.wait_for_changes(self.backend_context)
                 if have_changes then
                     log.info('harper: got new config')
