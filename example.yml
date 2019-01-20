@@ -1,19 +1,24 @@
-box:
+clusters:
+  app_001:
+    master_selection_policy: 'manual'
+    master: 'node1'
+common:
+  replication:
+    username: 'replicator'
+    password: 'replicator_pass'
+  app: {}  
+  box:
+    replication_connect_quorum: 0
     background: false
     log: "| tee"
-
-cluster:
-    instances:
-        node1:
-            listen: '127.0.0.1:3301'
-            remote_addr: '127.0.0.1:3301'
-        node2:
-            listen: '127.0.0.2:3301'
-            remote_addr: '127.0.0.2:3301'
-
-    replication:
-        username: 'replicator'
-        password: 'replicator_pass'
-
-    replication_policy: 'mesh'
-    master: 'node1'
+instances:
+  node1:
+    cluster: app_001
+    remote_addr: '127.0.0.1:3301'
+    box:
+      listen: '127.0.0.1:3301'
+  node2:
+    cluster: app_001
+    remote_addr: '127.0.0.2:3301'
+    box:
+      listen: '127.0.0.2:3301'

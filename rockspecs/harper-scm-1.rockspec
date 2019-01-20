@@ -19,8 +19,8 @@ build = {
         ['harper'] = 'harper/init.lua',
         ['harper.backends.consul'] = 'harper/backends/consul.lua',
         
-        ['harper.consul'] = 'harper/consul/init.lua',
-        ['harper.consul.kv'] = 'harper/consul/kv/init.lua',
+        ['consul'] = 'consul/init.lua',
+        ['consul.kv'] = 'consul/kv/init.lua',
     }
 }
 

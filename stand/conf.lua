@@ -1,4 +1,7 @@
-box = {}
+box = {
+    background = false,
+    log = '| tee'
+}
 
 harper = {
     backend = 'consul',
