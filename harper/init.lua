@@ -190,6 +190,40 @@ local function get_config(self, local_config)
 
     local master = get_master(self, backend_config, my_cluster_name)
     local is_master = (master == self.instance_name)
+    local prev_master = self.master
+
+    print(prev_master, '->', master)
+
+    if prev_master ~= nil and master ~= prev_master then
+        -- master has been changed
+        if prev_master == self.instance_name then
+            -- if I was a master, then just quietly do nothing
+            local a = 1
+        elseif is_master then
+            -- if I became a master
+            -- need to contact prev master and wait for its lsn
+            local nbox = require 'net.box'
+
+            -- TODO: if no connection - remove from cluster
+            -- TODO: if no active replication - remove from cluster
+
+            local prev_master_addr = self._backend_config.instances[prev_master].remote_addr
+            log.info('Connecting to prev master %s: %s', prev_master, prev_master_addr)
+            local conn = nbox.connect(prev_master_addr)
+            local prev_master_info = conn:eval([[
+                box.cfg{read_only = true}
+                return {
+                    id = box.info.id,
+                    lsn = box.info.lsn
+                }
+            ]])
+            conn:close()
+            
+            log.info('Waiting for lsn %d (currently have %d) from node %d (%s)', prev_master_info.lsn, box.info.replication[prev_master_info.id].lsn, prev_master_info.id, prev_master_addr)
+            util.wait_lsn(prev_master_info.id, prev_master_info.lsn, 10)
+        end
+    end
+
     local repl_part = get_replication(self, backend_config, my_cluster_name, master, is_master, buddies)
 
     local config = {}
@@ -201,6 +235,8 @@ local function get_config(self, local_config)
     log.info('Current config: ' .. require'yaml'.encode(config))
 
     self.master = master
+    self._prev_backend_config = self._backend_config
+    self._backend_config = backend_config
 
     return config
 end
@@ -335,6 +371,8 @@ local function new(instance_name, harper_config)
         config = harper_config,
         instance_name = instance_name,
         master = box.NULL,
+        _backend_config = box.NULL,
+        _prev_backend_config = box.NULL,
     }
 
     assert(type(self.instance_name) == 'string', 'instance_name is required')
