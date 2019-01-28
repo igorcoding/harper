@@ -21,7 +21,7 @@ function M.wait_lsn(server_id, lsn, timeout, pause)
     repeat
         fiber.sleep(pause)
     until box.info.replication[server_id].lsn >= lsn or ( timeout and fiber.time() > start + timeout )
-    return box.info.replication[server_id].lsn >= lsn
+    return box.info.replication[server_id].lsn >= lsn, box.info.replication[server_id].lsn
 end
 
 

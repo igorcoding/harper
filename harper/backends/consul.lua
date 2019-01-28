@@ -6,7 +6,7 @@ local consul = require 'consul'
 
 local SESSION_TTL = '10s'
 local SESSION_BEHAVIOR = 'delete'
-local MASTER_KEY_POLL_TIMEOUT = '5s'
+local KEY_POLL_TIMEOUT = '5s'
 
 local M = {}
 
@@ -57,25 +57,23 @@ function M._ensure_sid(self)
 end
 
 function M.get_config(self)
-    local index, val = self:_get_single_key(self.prefix .. '/config')
+    local index, val = self:_get_single_key(self:config_key())
     self._index_config = index
     return val
 end
 
-function M.wait_for_changes(self)
-    local new_index, _ = self.consul_client.kv.get(self.prefix .. '/config', {
-        index = self._index_config,
-        wait = '5s',
-    })
-    local have_changes = new_index ~= self._index_config
-    self._index_config = new_index
-    return have_changes
+function M.config_key(self)
+    return self.prefix .. '/config'
+end
+
+function M.master_key(self)
+    return self.prefix .. '/_master'
 end
 
 function M.elect_master(self)
     local sid = self:_ensure_sid()
 
-    local key = self.prefix .. '/_master'
+    local key = self:master_key()
     local value = {
         master = self.instance_name
     }
@@ -106,10 +104,33 @@ function M.elect_master(self)
     return value.master
 end
 
-function M.wait_for_master_change(self)
-    local new_index, value = self:_get_single_key(self.prefix .. '/_master', {
+
+function M._wait_for_config_change(self)
+    local new_index, _ = self.consul_client.kv.get(self:config_key(), {
+        index = self._index_config,
+        wait = KEY_POLL_TIMEOUT,
+    })
+    local have_changes = new_index ~= self._index_config
+    self._index_config = new_index
+    return have_changes
+end
+
+function M.wait_for_config_change(self, on_change, on_error)
+    local ind = self._index_config
+    xpcall(function()
+        if self:_wait_for_config_change() then
+            on_change()
+        end
+    end, function(err)
+        self._index_config = ind  -- restore prev index
+        on_error(err)
+    end)
+end
+
+function M._wait_for_master_change(self)
+    local new_index, value = self:_get_single_key(self:master_key(), {
         index = self._index_master,
-        wait = MASTER_KEY_POLL_TIMEOUT,
+        wait = KEY_POLL_TIMEOUT,
     })
     if value == nil and self._index_master ~= nil then
         -- key disappeared
@@ -119,12 +140,21 @@ function M.wait_for_master_change(self)
 
     log.info('current master index: %s. new_index: %s', self._index_master, new_index)
 
-    if new_index ~= self._index_master then
-        self._index_master = new_index
-        return true
-    end
+    local have_changes = new_index ~= self._index_config
+    self._index_config = new_index
+    return have_changes
+end
 
-    return false
+function M.wait_for_master_change(self, on_change, on_error)
+    local ind = self._index_master
+    xpcall(function()
+        if self:_wait_for_master_change() then
+            on_change()
+        end
+    end, function(err)
+        self._index_master = ind  -- restore prev index
+        on_error(err)
+    end)
 end
 
 function M.send_heartbeat(self)

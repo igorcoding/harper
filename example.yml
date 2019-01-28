@@ -6,6 +6,7 @@ common:
   replication:
     username: 'replicator'
     password: 'replicator_pass'
+  access: {}
   app: {}  
   box:
     replication_connect_quorum: 0
