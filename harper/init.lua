@@ -48,7 +48,7 @@ local function get_config(self, local_config)
     end
 
     local make_replication_addr = function(cfg)
-        if cfg.replication.username and cfg.replication.password then
+        if not cfg.replication.username and not cfg.replication.password then
             return cfg.remote_addr
         end
         return string.format('%s:%s@%s', cfg.replication.username, cfg.replication.password, cfg.remote_addr)
